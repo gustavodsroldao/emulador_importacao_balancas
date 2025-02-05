@@ -3,28 +3,45 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import ttk
 
-class EmuladorFilizola:
+class EmuladorImportacao:
     def __init__(self, master):
         self.master = master
-        self.master.title("Emulador de Importação – Modelo Filizola")
-        self.master.geometry("1000x600")
+        self.master.title("Emulador de Importação de Produtos")
+        self.master.geometry("1050x650")
         
-        # Neste exemplo, o único modelo disponível é Filizola.
-        self.modelo = "Filizola"
-        label_modelo = tk.Label(master, text=f"Modelo Selecionado: {self.modelo}", font=("Arial", 12, "bold"))
-        label_modelo.pack(pady=10)
+        # Área de seleção do modelo
+        top_frame = tk.Frame(master)
+        top_frame.pack(pady=10)
         
-        # Label com a descrição abaixo do modelo selecionado
+        label_modelo = tk.Label(top_frame, text="Modelo Selecionado:", font=("Arial", 12, "bold"))
+        label_modelo.grid(row=0, column=0, sticky="w", padx=5)
+        
+        self.combo_modelo = ttk.Combobox(top_frame, values=["Filizola", "Toledo", "Urano"], state="readonly", width=20)
+        self.combo_modelo.set("Selecione o Modelo")
+        self.combo_modelo.grid(row=0, column=1, padx=5)
+        self.combo_modelo.bind("<<ComboboxSelected>>", self.on_modelo_selecionado)
+        
+        # Frame para os radiobuttons de Toledo (aparece somente se o modelo for Toledo)
+        self.frame_toledo = tk.Frame(top_frame)
+        self.toledo_var = tk.StringVar(value="MGV5")
+        self.rb_mgv5 = tk.Radiobutton(self.frame_toledo, text="MGV5", variable=self.toledo_var, value="MGV5")
+        self.rb_mgv6 = tk.Radiobutton(self.frame_toledo, text="MGV6", variable=self.toledo_var, value="MGV6")
+        self.rb_mgv5.pack(side="left", padx=5)
+        self.rb_mgv6.pack(side="left", padx=5)
+        self.frame_toledo.grid(row=0, column=2, padx=10)
+        self.frame_toledo.grid_remove()  # Oculta inicialmente
+        
+        # Label com a descrição abaixo da seleção
         self.label_descricao = tk.Label(master,
-                                        text="Obs: Este emulador permite importar arquivos TXT referente a carga de produtos, "
-                                             "incluindo informações nutricionais, ingredientes e departamentos, conforme o padrão definido",
+                                        text="Este emulador permite importar arquivos TXT referentes à carga de produtos para balança. "
+                                             "O modelo Filizola possui layout com campos fixos, enquanto o modelo Toledo possui dois formatos: "
+                                             "MGV5 (sem informação nutricional – layout com três blocos extra) e MGV6 (com informação nutricional a partir da posição 39).",
                                         font=("Arial", 10),
-                                        wraplength=500,
+                                        wraplength=800,
                                         justify="left")
         self.label_descricao.pack(pady=5)
         
-        
-        # Botão para selecionar arquivos TXT (vários)
+        # Botão para selecionar arquivos TXT
         self.btn_carregar = tk.Button(master, text="Selecionar Arquivos TXT", command=self.selecionar_arquivos, width=30)
         self.btn_carregar.pack(pady=10)
         
@@ -43,30 +60,32 @@ class EmuladorFilizola:
         
         # Dicionário para armazenar os produtos (chave: código do produto)
         self.produtos = {}
+        
+        # Guarda qual modelo está sendo utilizado
+        self.modelo_selecionado = None
 
-    def ler_cadtxt(self, arquivo):
-        """
-        Lê um arquivo CADTXT.TXT e extrai os dados básicos.
-        Layout (exemplo):
-          - Código do produto: 6 caracteres (posição 0-5)
-          - Tipo (P ou U): 1 caractere (posição 6)
-          - Descrição: 22 caracteres (posição 7-28)
-          - Preço unitário: 7 caracteres (posição 29-35) – valor com duas casas decimais implícitas
-          - Validade: 3 caracteres (posição 36-38)
-          - Se houver informações nutricionais anexadas, elas iniciam na posição 39.
-        """
+    def on_modelo_selecionado(self, event):
+        modelo = self.combo_modelo.get()
+        self.modelo_selecionado = modelo
+        if modelo == "Toledo":
+            self.frame_toledo.grid()  # Exibe os radiobuttons
+        elif modelo == "Filizola":
+            self.frame_toledo.grid_remove()
+    # --------------------------------------------------
+    # Funções de leitura para Filizola (CADTXT e demais arquivos)
+    # --------------------------------------------------
+    def ler_cadtxt_filizola(self, arquivo):
         try:
             with open(arquivo, "r", encoding="utf-8") as f:
                 for linha in f:
                     linha = linha.rstrip("\n")
                     if len(linha) < 39:
-                        continue  # linha inválida ou incompleta
+                        continue
                     codigo = linha[0:6]
                     tipo = linha[6:7]
                     descricao = linha[7:29].strip()
                     preco_raw = linha[29:36]
                     validade = linha[36:39]
-                    
                     try:
                         preco = int(preco_raw) / 100.0
                     except:
@@ -81,21 +100,78 @@ class EmuladorFilizola:
                         "Ingredientes": None,
                         "Departamento": None
                     }
-                    # Se houver conteúdo extra, trata-o como informação nutricional “bruta”
                     if len(linha) > 39:
                         add_nutri = linha[39:]
-                        self.produtos[codigo]["Nutrição"] = add_nutri
+                        self.produtos[codigo]["Nutrição"] = add_nutri.strip()
+        except Exception as e:
+            messagebox.showerror("Erro", f"Erro ao ler {os.path.basename(arquivo)}: {e}")
+
+    # --------------------------------------------------
+    # Funções de leitura para Toledo
+    # --------------------------------------------------
+    def ler_cadtxt_toledo(self, arquivo):
+        formato = self.toledo_var.get()  # "MGV5" ou "MGV6"
+        try:
+            with open(arquivo, "r", encoding="utf-8") as f:
+                for linha in f:
+                    linha = linha.rstrip("\n")
+                    if formato == "MGV5":
+                        # Se a linha tiver menos de 111 caracteres, completa com espaços
+                        if len(linha) < 111:
+                            linha = linha.ljust(111)
+                        if len(linha) != 111:
+                            continue  # ignora linhas que não tenham o tamanho exato
+                        codigo = linha[0:6]
+                        tipo = linha[6:7]
+                        descricao = linha[7:29].strip()
+                        preco_raw = linha[29:36]
+                        validade = linha[36:39]
+                        try:
+                            preco = int(preco_raw) / 100.0
+                        except:
+                            preco = None
+                        extra1 = linha[39:63]
+                        extra2 = linha[63:87]
+                        extra3 = linha[87:111]
+                        self.produtos[codigo] = {
+                            "Código": codigo,
+                            "Tipo": tipo,
+                            "Descrição": descricao,
+                            "Preço": preco,
+                            "Validade": validade,
+                            "Nutrição": extra1.strip(),
+                            "Ingredientes": extra2.strip(),
+                            "Departamento": extra3.strip()
+                        }
+                    elif formato == "MGV6":
+                        if len(linha) < 39:
+                            continue
+                        codigo = linha[0:6]
+                        tipo = linha[6:7]
+                        descricao = linha[7:29].strip()
+                        preco_raw = linha[29:36]
+                        validade = linha[36:39]
+                        try:
+                            preco = int(preco_raw) / 100.0
+                        except:
+                            preco = None
+                        self.produtos[codigo] = {
+                            "Código": codigo,
+                            "Tipo": tipo,
+                            "Descrição": descricao,
+                            "Preço": preco,
+                            "Validade": validade,
+                            "Nutrição": None,
+                            "Ingredientes": None,
+                            "Departamento": None
+                        }
+                        if len(linha) > 39:
+                            add_nutri = linha[39:]
+                            self.produtos[codigo]["Nutrição"] = add_nutri.strip()
         except Exception as e:
             messagebox.showerror("Erro", f"Erro ao ler {os.path.basename(arquivo)}: {e}")
 
     def ler_nutri(self, arquivo):
-        """
-        Lê o arquivo NUTRI.TXT e atualiza as informações nutricionais dos produtos.
-        Layout (exemplo):
-          - Código do produto: 6 caracteres (posição 0-5)
-          - Porção: 35 caracteres (posição 6-40)
-          - Em seguida, os valores nutricionais.
-        """
         try:
             with open(arquivo, "r", encoding="utf-8") as f:
                 for linha in f:
@@ -112,12 +188,6 @@ class EmuladorFilizola:
             print(f"Erro ao ler {os.path.basename(arquivo)}: {e}")
 
     def ler_rec_ass(self, arquivo):
-        """
-        Lê o arquivo REC_ASS.TXT que contém os ingredientes.
-        Layout (exemplo):
-          - Linha com: espaços + código do produto repetido + ingredientes
-          - Linha seguinte contendo apenas "@" (delimitador)
-        """
         try:
             with open(arquivo, "r", encoding="utf-8") as f:
                 linhas = f.readlines()
@@ -127,22 +197,15 @@ class EmuladorFilizola:
                     if len(linha) < 12:
                         i += 1
                         continue
-                    # Supondo que o código esteja em uma posição fixa (ex.: posição 12 a 18)
                     codigo = linha[12:18]
                     ingredientes = linha[18:].strip()
                     if codigo in self.produtos:
                         self.produtos[codigo]["Ingredientes"] = ingredientes
-                    i += 2  # pula a linha com "@" também
+                    i += 2
         except Exception as e:
             print(f"Erro ao ler {os.path.basename(arquivo)}: {e}")
 
     def ler_setores(self, arquivo):
-        """
-        Lê o arquivo SETORES.TXT que contém os departamentos.
-        Layout (exemplo):
-          - Descrição do departamento: 12 caracteres (posição 0-11)
-          - Código do produto: 6 caracteres (posição 12-17)
-        """
         try:
             with open(arquivo, "r", encoding="utf-8") as f:
                 for linha in f:
@@ -157,38 +220,38 @@ class EmuladorFilizola:
             print(f"Erro ao ler {os.path.basename(arquivo)}: {e}")
 
     def selecionar_arquivos(self):
-        """
-        Abre um diálogo para seleção de múltiplos arquivos TXT. De acordo com o nome do arquivo,
-        chama a função de leitura correspondente.
-        """
         arquivos = filedialog.askopenfilenames(title="Selecione os arquivos TXT",
                                                 filetypes=[("Arquivos TXT", "*.txt")])
         if not arquivos:
             return
         
-        # Reinicia o dicionário de produtos
         self.produtos = {}
         
+        modelo = self.combo_modelo.get()
+        formato_toledo = self.toledo_var.get() if modelo == "Toledo" else None
+
         for arq in arquivos:
             nome = os.path.basename(arq).upper()
             if "CADTXT" in nome:
-                self.ler_cadtxt(arq)
+                if modelo == "Filizola":
+                    self.ler_cadtxt_filizola(arq)
+                elif modelo == "Toledo":
+                    self.ler_cadtxt_toledo(arq)
             elif "NUTRI" in nome:
-                self.ler_nutri(arq)
+                if modelo == "Filizola" or (modelo == "Toledo" and formato_toledo == "MGV6"):
+                    self.ler_nutri(arq)
             elif "REC_ASS" in nome:
-                self.ler_rec_ass(arq)
+                if modelo == "Filizola" or (modelo == "Toledo" and formato_toledo == "MGV6"):
+                    self.ler_rec_ass(arq)
             elif "SETORES" in nome:
-                self.ler_setores(arq)
+                if modelo == "Filizola" or (modelo == "Toledo" and formato_toledo == "MGV6"):
+                    self.ler_setores(arq)
             else:
                 print(f"Arquivo não identificado (ignorado): {nome}")
         
         self.atualizar_tabela()
     
     def atualizar_tabela(self):
-        """
-        Atualiza a Treeview com os dados dos produtos importados.
-        """
-        # Limpa a tabela
         for item in self.tabela.get_children():
             self.tabela.delete(item)
         
@@ -210,7 +273,7 @@ class EmuladorFilizola:
 
 def main():
     root = tk.Tk()
-    app = EmuladorFilizola(root)
+    app = EmuladorImportacao(root)
     root.mainloop()
 
 if __name__ == "__main__":
