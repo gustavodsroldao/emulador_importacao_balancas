@@ -3,6 +3,9 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import ttk
 
+# Este emulador foi desenvolvido para simular a importação de produtos para balanças de supermercado.
+# Inclusive com foco principal para uso de testes no navi e link.]
+
 class EmuladorImportacao:
     def __init__(self, master):
         self.master = master
@@ -33,16 +36,17 @@ class EmuladorImportacao:
         
         # Label com a descrição abaixo da seleção
         self.label_descricao = tk.Label(master,
-                                        text="Este emulador permite importar arquivos TXT referentes à carga de produtos para balança. "
-                                             "O modelo Filizola possui layout com campos fixos, enquanto o modelo Toledo possui dois formatos: "
-                                             "MGV5 (sem informação nutricional – layout com três blocos extra) e MGV6 (com informação nutricional a partir da posição 39).",
+                                        text="Elgin exporta de: Urano, Filizola e Toledo.\n"
+                                        "Toledo exporta de: exclusivamente Toledo MGV5 e MGV6.\n"
+                                        "Urano exporta de: exclusivamente Urano.\n"
+                                        "Upx exporta de: exclusivamente Toledo.\n",
                                         font=("Arial", 10),
                                         wraplength=800,
                                         justify="left")
         self.label_descricao.pack(pady=5)
         
         # Botão para selecionar arquivos TXT
-        self.btn_carregar = tk.Button(master, text="Selecionar Arquivos TXT", command=self.selecionar_arquivos, width=30)
+        self.btn_carregar = tk.Button(master, text="Importar", command=self.selecionar_arquivos, width=20)
         self.btn_carregar.pack(pady=10)
         
         # Label de status
